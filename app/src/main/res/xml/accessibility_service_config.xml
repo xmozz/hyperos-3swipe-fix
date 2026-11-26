@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  packageNames is intentionally NOT set here. The fix must observe the previous
+  app's package to distinguish a swipe-up-to-home gesture (coming from an app)
+  from an intentional drawer open (coming from the home screen). Restricting
+  events to com.miui.home would hide every non-launcher package and break that
+  detection. All events are therefore received and filtered in code instead.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100" />

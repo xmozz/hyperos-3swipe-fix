@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Home Fix</string>
+    <string name="subtitle">Returns home when HyperOS lands in the app drawer after a swipe-up gesture</string>
+    <string name="enable_fix">Enable auto-home fix</string>
+    <string name="status_on">Accessibility service: enabled</string>
+    <string name="status_off">Accessibility service: not enabled</string>
+    <string name="open_accessibility">Open accessibility settings</string>
+    <string name="open_battery">Disable battery optimization</string>
+    <string name="instructions">Steps: 1. Enable the toggle. 2. Turn on “Home Fix” in accessibility settings. 3. Disable battery optimization so HyperOS does not kill the service.</string>
+    <string name="log_hint">Debug log</string>
+    <string name="timeout_label">Auto-home window: %1$.1f s</string>
+    <string name="timeout_hint">Only auto-home if the drawer opens within this time after leaving an app. Lower = fewer false triggers.</string>
+    <string name="reaction_label">Reaction delay: %1$d ms</string>
+    <string name="reaction_hint">Delay before auto-home fires. Lower = faster (drawer less visible), higher = smoother.</string>
+    <string name="second_label">2nd swipe delay: %1$d ms</string>
+    <string name="second_hint">Gap between the 1st and 2nd home action (search case: search → drawer → home). Raise if the search case lands on the drawer.</string>
+    <string name="debug_mode">Debug mode (verbose log)</string>
+    <string name="refresh_log">Refresh log</string>
+    <string name="share_log">Share log</string>
+    <string name="no_log">No log yet. Reproduce the bug (open app from drawer search, then swipe up), then tap Refresh.</string>
+    <string name="channel_name">Home Fix service</string>
+    <string name="channel_desc">Keeps the auto-home fix running</string>
+    <string name="notif_title">Home Fix</string>
+    <string name="notif_text">Auto-home gesture fix active</string>
+    <string name="accessibility_service_label">Home Fix</string>
+    <string name="accessibility_service_description">Automatically returns to the home screen when HyperOS lands in the app drawer or app-drawer search after a swipe-up-to-home gesture.</string>
+</resources>
