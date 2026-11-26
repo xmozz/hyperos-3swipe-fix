@@ -58,7 +58,12 @@ class HomeFixService : AccessibilityService() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
-    private val homeRunnable = Runnable { performGlobalAction(GLOBAL_ACTION_HOME) }
+    private val homeRunnable = Runnable {
+        try {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        } catch (_: Exception) {
+        }
+    }
     private var lastAppPackage: String? = null
     private var lastAppActiveAt = 0L
     private var lastHomeActionAt = 0L
@@ -74,7 +79,11 @@ class HomeFixService : AccessibilityService() {
         reactionMs = Prefs.getReactionMs(this)
         secondDelayMs = Prefs.getSecondDelayMs(this)
         debug = Prefs.isDebug(this)
-        startForegroundNotification()
+        try {
+            startForegroundNotification()
+        } catch (t: Throwable) {
+            Log.e(TAG, "startForeground failed", t)
+        }
         log("=== service connected, enabled=$enabled, timeout=$timeoutMs ms, reaction=$reactionMs ms, second=$secondDelayMs ms ===")
     }
 
@@ -86,28 +95,32 @@ class HomeFixService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
         if (!enabled) return
-        val pkg = e.packageName?.toString() ?: "null"
-        val cls = e.className?.toString() ?: "null"
-        val now = SystemClock.elapsedRealtime()
-        when (e.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                vlog("STATE   pkg=$pkg cls=$cls")
-                if (isApp(pkg)) {
-                    if (pkg != lastAppPackage) vlog("app    : pkg=$pkg cls=$cls")
-                    lastAppPackage = pkg
-                    lastAppActiveAt = now
+        try {
+            val pkg = e.packageName?.toString() ?: "null"
+            val cls = e.className?.toString() ?: "null"
+            val now = SystemClock.elapsedRealtime()
+            when (e.eventType) {
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                    vlog("STATE   pkg=$pkg cls=$cls")
+                    if (isApp(pkg)) {
+                        if (pkg != lastAppPackage) vlog("app    : pkg=$pkg cls=$cls")
+                        lastAppPackage = pkg
+                        lastAppActiveAt = now
+                    }
+                    scheduleInspect()
                 }
-                scheduleInspect()
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                    vlog("WINDOWS pkg=$pkg cls=$cls")
+                    scheduleInspect()
+                }
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                    if (isApp(pkg)) lastAppActiveAt = now
+                }
+                else ->
+                    vlog("EVENT(${e.eventType}) pkg=$pkg cls=$cls")
             }
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
-                vlog("WINDOWS pkg=$pkg cls=$cls")
-                scheduleInspect()
-            }
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                if (isApp(pkg)) lastAppActiveAt = now
-            }
-            else ->
-                vlog("EVENT(${e.eventType}) pkg=$pkg cls=$cls")
+        } catch (t: Throwable) {
+            Log.e(TAG, "onAccessibilityEvent failed", t)
         }
     }
 
@@ -121,45 +134,47 @@ class HomeFixService : AccessibilityService() {
     private val inspectRunnable = Runnable { inspectAndFix() }
 
     private fun inspectAndFix() {
-        val now = SystemClock.elapsedRealtime()
-        val state = launcherState()
-        when (state) {
-            0 -> { // still inside an app
-                fixing = false
-                homeAttempts = 0
-                homeSeenAt = 0L
-                vlog("other  : not launcher")
-            }
-            1 -> { // actual home screen (has workspace widgets)
-                if (fixing) {
-                    if (homeSeenAt == 0L) homeSeenAt = now
-                    if (now - homeSeenAt > HOME_STABLE_MS) {
-                        log("home   : stable home, clearing context")
-                        fixing = false
-                        homeAttempts = 0
-                        homeSeenAt = 0L
-                        lastAppPackage = null
-                    }
-                    // not stable yet -> keep fixing, but don't fire
-                } else {
-                    vlog("home   : launcher (no fix)")
+        try {
+            val now = SystemClock.elapsedRealtime()
+            when (launcherState()) {
+                0 -> { // still inside an app
+                    fixing = false
+                    homeAttempts = 0
+                    homeSeenAt = 0L
+                    vlog("other  : not launcher")
                 }
-            }
-            else -> { // 2 = drawer/search, 3 = blank/transitional launcher
-                homeSeenAt = 0L
-                if (!fixing) {
-                    if (lastAppPackage != null && now - lastAppActiveAt < timeoutMs) {
-                        fixing = true
-                        lastHomeActionAt = 0L
-                        homeAttempts = 0
-                        log("fix    : started (came from $lastAppPackage)")
+                1 -> { // actual home screen (has workspace widgets)
+                    if (fixing) {
+                        if (homeSeenAt == 0L) homeSeenAt = now
+                        if (now - homeSeenAt > HOME_STABLE_MS) {
+                            log("home   : stable home, clearing context")
+                            fixing = false
+                            homeAttempts = 0
+                            homeSeenAt = 0L
+                            lastAppPackage = null
+                        }
                     } else {
-                        vlog("launcher: no recent app context")
-                        return
+                        vlog("home   : launcher (no fix)")
                     }
                 }
-                fire(now, if (state == 2) "drawer" else "blank")
+                else -> { // 2 = drawer/search, 3 = blank/transitional launcher
+                    homeSeenAt = 0L
+                    if (!fixing) {
+                        if (lastAppPackage != null && now - lastAppActiveAt < timeoutMs) {
+                            fixing = true
+                            lastHomeActionAt = 0L
+                            homeAttempts = 0
+                            log("fix    : started (came from $lastAppPackage)")
+                        } else {
+                            vlog("launcher: no recent app context")
+                            return
+                        }
+                    }
+                    fire(now, "drawer")
+                }
             }
+        } catch (t: Throwable) {
+            Log.e(TAG, "inspectAndFix failed", t)
         }
     }
 
@@ -176,7 +191,11 @@ class HomeFixService : AccessibilityService() {
         homeAttempts++
         lastHomeActionAt = now
         if (reactionMs <= 0L) {
-            performGlobalAction(GLOBAL_ACTION_HOME)
+            try {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            } catch (t: Throwable) {
+                Log.e(TAG, "performGlobalAction failed", t)
+            }
         } else {
             handler.postDelayed(homeRunnable, reactionMs)
         }
@@ -184,65 +203,70 @@ class HomeFixService : AccessibilityService() {
 
     /** 0 = not in launcher, 1 = home, 2 = drawer/search, 3 = blank/transitional. */
     private fun launcherState(): Int {
-        val root = rootInActiveWindow
-        if (root != null) {
-            val pkg = root.packageName?.toString() ?: "?"
-            if (pkg == APP_FINDER_PKG) {
-                root.recycle()
-                vlog("active : pkg=$pkg (app finder)")
-                return 2
-            }
-            if (pkg == LAUNCHER_PKG) {
-                val drawer = findDrawerIndicator(root)
-                val home = findHomeIndicator(root)
-                root.recycle()
-                vlog("active : pkg=$pkg drawer=$drawer home=$home")
-                return when {
-                    drawer -> 2
-                    home -> 1
-                    else -> 3
+        try {
+            val root = rootInActiveWindow
+            if (root != null) {
+                val pkg = root.packageName?.toString() ?: "?"
+                if (pkg == APP_FINDER_PKG) {
+                    vlog("active : pkg=$pkg (app finder)")
+                    return 2
                 }
+                if (pkg == LAUNCHER_PKG) {
+                    val drawer = findDrawerIndicator(root)
+                    val home = findHomeIndicator(root)
+                    vlog("active : pkg=$pkg drawer=$drawer home=$home")
+                    return when {
+                        drawer -> 2
+                        home -> 1
+                        else -> 3
+                    }
+                }
+                return 0
             }
-            root.recycle()
+            for (w in windows) {
+                val r = w.root ?: continue
+                val p = r.packageName?.toString()
+                if (p == APP_FINDER_PKG) return 2
+                if (p == LAUNCHER_PKG && findDrawerIndicator(r)) return 2
+            }
+            return 0
+        } catch (t: Throwable) {
+            Log.e(TAG, "launcherState failed", t)
             return 0
         }
-        for (w in windows) {
-            val r = w.root ?: continue
-            val p = r.packageName?.toString()
-            if (p == APP_FINDER_PKG) {
-                r.recycle()
-                return 2
-            }
-            if (p == LAUNCHER_PKG && findDrawerIndicator(r)) {
-                r.recycle()
-                return 2
-            }
-            r.recycle()
-        }
-        return 0
     }
 
     private fun findDrawerIndicator(node: AccessibilityNodeInfo): Boolean {
-        if (node.viewIdResourceName == "com.miui.home:id/all_apps_setting_button") return true
-        if (TAB_RE.containsMatchIn(node.contentDescription?.toString() ?: "")) return true
-        if (node.className?.toString() == "android.widget.EditText" &&
-            node.packageName?.toString() == LAUNCHER_PKG
-        ) return true
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            if (findDrawerIndicator(child)) return true
+        try {
+            if (node.viewIdResourceName == "com.miui.home:id/all_apps_setting_button") return true
+            if (TAB_RE.containsMatchIn(node.contentDescription?.toString() ?: "")) return true
+            if (node.className?.toString() == "android.widget.EditText" &&
+                node.packageName?.toString() == LAUNCHER_PKG
+            ) return true
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                if (findDrawerIndicator(child)) return true
+            }
+            return false
+        } catch (t: Throwable) {
+            Log.e(TAG, "findDrawerIndicator failed", t)
+            return false
         }
-        return false
     }
 
     private fun findHomeIndicator(node: AccessibilityNodeInfo): Boolean {
-        val id = node.viewIdResourceName ?: ""
-        if (id == "com.miui.home:id/workspace" || id == "com.miui.home:id/widget_container") return true
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            if (findHomeIndicator(child)) return true
+        try {
+            val id = node.viewIdResourceName ?: ""
+            if (id == "com.miui.home:id/workspace" || id == "com.miui.home:id/widget_container") return true
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                if (findHomeIndicator(child)) return true
+            }
+            return false
+        } catch (t: Throwable) {
+            Log.e(TAG, "findHomeIndicator failed", t)
+            return false
         }
-        return false
     }
 
     override fun onInterrupt() {}
